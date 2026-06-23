@@ -118,8 +118,8 @@ export function BookingProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     const token = localStorage.getItem('token');
     if (token) {
-      refreshReservations();
-      refreshRooms();
+      refreshReservations().catch(() => { });
+      refreshRooms().catch(() => { });
     }
   }, []);
 
