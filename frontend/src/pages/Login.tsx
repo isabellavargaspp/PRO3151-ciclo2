@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import './Login.css';
-import { apiLogin, apiRegister } from '../context/api';
+import { apiLogin, apiRegister } from "../api";
 
 interface LoginProps {
   onLogin: () => void;
