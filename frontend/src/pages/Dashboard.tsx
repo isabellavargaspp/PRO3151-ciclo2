@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { RoomCard } from '../components/RoomCard';
 import './Dashboard.css';
 import { useBooking } from '../context/BookingContext';
@@ -28,23 +28,56 @@ const ROOMS: Room[] = [
   { id: 'D', name: 'Sala de Reunião D', capacity: '4p', location: '1º Andar', color: 'D', cssColor: 'var(--color-room-d)' },
 ];
 
+// ─── Helpers de data/hora ────────────────────────────────────────────────────
+
+function getNowDate(): string {
+  return new Date().toLocaleDateString('sv-SE'); // "YYYY-MM-DD"
+}
+
+function getNowTime(): string {
+  return new Date().toLocaleTimeString('pt-BR', {
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  });
+}
+
+function formatCurrentTime(date: Date): string {
+  return date.toLocaleDateString('pt-BR', {
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long',
+  }) + ' · ' + date.toLocaleTimeString('pt-BR', {
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  });
+}
+
+// ─── Componente ──────────────────────────────────────────────────────────────
+
 export function Dashboard() {
-  const currentTime = 'quinta-feira, 18 de junho · 12:38';
-  const SIM_DATE = '2026-06-18';
-  const SIM_TIME = '12:38';
+  // Atualiza a hora a cada minuto
+  const [now, setNow] = useState(new Date());
+
+  useEffect(() => {
+    const interval = setInterval(() => setNow(new Date()), 60000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const SIM_DATE = getNowDate();
+  const SIM_TIME = getNowTime();
+  const currentTime = formatCurrentTime(now);
 
   const { reservations, addReservation } = useBooking();
 
-  // State to track which room is currently showing the duration selection
   const [activeQuickReserveRoomId, setActiveQuickReserveRoomId] = useState<RoomId | null>(null);
 
-  // Helper to parse time string into minutes
   const parseTime = (t: string) => {
     const [h, m] = t.split(':').map(Number);
     return h * 60 + m;
   };
 
-  // Helper to find the active booking for a room at simulated time
   const getActiveBooking = (roomId: RoomId): Booking | null => {
     const nowMins = parseTime(SIM_TIME);
 
@@ -52,23 +85,19 @@ export function Dashboard() {
       if (r.roomId !== roomId) return false;
       if (r.status === 'Cancelado') return false;
 
-      // 1. Direct date match
       if (r.date === SIM_DATE) {
         const start = parseTime(r.startTime);
         const end = parseTime(r.endTime);
         return nowMins >= start && nowMins < end;
       }
 
-      // 2. Recurrence match
       if (r.recurrence) {
         const resDate = new Date(r.date + 'T00:00:00');
         const targetDate = new Date(SIM_DATE + 'T00:00:00');
         if (targetDate >= resDate && resDate.getDay() === targetDate.getDay()) {
           let isWithinRecurrenceRange = true;
-          if (r.recurrence.includes('até')) {
-            const datePart = r.recurrence.split('até')[1].trim();
-            const [d, m, y] = datePart.split('/').map(Number);
-            const limitDate = new Date(y, m - 1, d, 23, 59, 59);
+          if (r.recurrenceEndDate) {
+            const limitDate = new Date(r.recurrenceEndDate + 'T23:59:59');
             if (targetDate > limitDate) isWithinRecurrenceRange = false;
           }
           if (isWithinRecurrenceRange) {
@@ -85,11 +114,10 @@ export function Dashboard() {
       title: res.title,
       startTime: res.startTime,
       endTime: res.endTime,
-      userName: res.userName
+      userName: res.userName,
     } : null;
   };
 
-  // Get list of reservations for today
   const todaysReservations = reservations.filter(r => {
     if (r.status === 'Cancelado') return false;
     if (r.date === SIM_DATE) return true;
@@ -98,10 +126,8 @@ export function Dashboard() {
       const resDate = new Date(r.date + 'T00:00:00');
       const targetDate = new Date(SIM_DATE + 'T00:00:00');
       if (targetDate >= resDate && resDate.getDay() === targetDate.getDay()) {
-        if (r.recurrence.includes('até')) {
-          const datePart = r.recurrence.split('até')[1].trim();
-          const [d, m, y] = datePart.split('/').map(Number);
-          const limitDate = new Date(y, m - 1, d, 23, 59, 59);
+        if (r.recurrenceEndDate) {
+          const limitDate = new Date(r.recurrenceEndDate + 'T23:59:59');
           if (targetDate > limitDate) return false;
         }
         return true;
@@ -116,8 +142,6 @@ export function Dashboard() {
 
   const handleSelectDuration = (roomId: RoomId, minutes: number) => {
     const startTime = SIM_TIME;
-
-    // Add minutes
     const [h, m] = startTime.split(':').map(Number);
     let endMin = m + minutes;
     let endHour = h + Math.floor(endMin / 60);
@@ -126,18 +150,16 @@ export function Dashboard() {
     const endTime = `${endHour.toString().padStart(2, '0')}:${endMin.toString().padStart(2, '0')}`;
     const room = ROOMS.find(r => r.id === roomId);
 
-    const result = addReservation({
-      title: 'Reunião Rápida',
+    const result = addReservation(
       roomId,
-      roomName: room?.name || '',
-      date: SIM_DATE,
+      'Reunião Rápida',
+      SIM_DATE,
       startTime,
-      endTime,
-      userName: 'Isabella Vargas',
-    });
+      endTime
+    );
 
-    if (!result.success) {
-      alert(result.error);
+    if (!result || (result as any).success === false) {
+      alert((result as any)?.error || 'Erro ao criar reserva');
     }
 
     setActiveQuickReserveRoomId(null);
