@@ -6,7 +6,7 @@ import {
   apiGetRooms,
   apiGetAvailability,
   getCurrentUser,
-} from './api';
+} from '../api';
 
 // ─────────────────────────────────────────
 // TIPOS
